@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,8 +28,18 @@ jobs:
           cp build/partition_table/partition-table.bin  out/
           cp build/flasher_args.json                    out/ || true
 
-      - name: Upload firmware
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: azhu-passport-c3
           path: out/
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: fw-${{ github.run_number }}
+          name: azhu firmware build ${{ github.run_number }}
+          files: |
+            out/bootloader.bin
+            out/partition-table.bin
+            out/azhu_passport.bin
