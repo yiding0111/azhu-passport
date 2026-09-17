@@ -123,8 +123,8 @@ void display_draw_indexed(const uint8_t *idx, const uint16_t *palette) {
         const uint8_t *src = idx + (size_t)y * DISP_W;
         int n = rows * DISP_W;
         for (int i = 0; i < n; i++) {
-            // 调色板是主机小端 RGB565；SPI 要屏字节序，逐像素高低字节互换
-            s_block[i] = __builtin_bswap16(palette[src[i]]);
+            // esp_lcd 已按屏字节序发送，这里直接用主机小端 RGB565，不要再 bswap
+            s_block[i] = palette[src[i]];
         }
         esp_lcd_panel_draw_bitmap(s_panel, 0, y, DISP_W, y + rows, s_block);
     }

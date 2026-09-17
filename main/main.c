@@ -25,6 +25,7 @@ void app_main(void) {
     azhu_init();
     display_init();
     display_set_backlight(90);
+    buttons_init();
 
     ESP_LOGI(TAG, "阿猪 on AI Passport：%d 动作 · %d 帧/动作 · %dx%d",
              azhu_num_actions(), azhu_frames_per(), azhu_w(), azhu_h());
