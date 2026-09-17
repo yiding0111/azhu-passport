@@ -148,3 +148,8 @@ void display_draw_indexed(const uint8_t *idx, const uint16_t *palette) {
         xSemaphoreTake(s_trans_done, portMAX_DELAY);
     }
 }
+
+void display_blit(int x, int y, int w, int h, const uint16_t *pix) {
+    esp_lcd_panel_draw_bitmap(s_panel, x, y, x + w, y + h, pix);
+    xSemaphoreTake(s_trans_done, portMAX_DELAY);
+}

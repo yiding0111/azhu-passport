@@ -7,6 +7,10 @@ typedef enum {
     BTN_OK,
 } btn_t;
 
-void  buttons_init(void);
-// 返回本次「新按下」的键（按下沿），无则 BTN_NONE
-btn_t buttons_read_event(void);
+typedef struct {
+    btn_t click;       // 短按（松手时产生）
+    btn_t longpress;   // 长按（按住约 1 秒时产生一次）
+} btn_event_t;
+
+void        buttons_init(void);
+btn_event_t buttons_poll(void);
