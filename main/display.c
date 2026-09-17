@@ -10,11 +10,14 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_heap_caps.h"
+#include "esp_attr.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 static esp_lcd_panel_handle_t    s_panel;
 static esp_lcd_panel_io_handle_t s_io;
+static SemaphoreHandle_t         s_trans_done;
 
 // 一次推 BLOCK_ROWS 行，缓冲 240*40*2 = 19KB，远小于可用堆
 #define BLOCK_ROWS 40
@@ -45,6 +48,16 @@ static const st_init_cmd_t ST_INIT[] = {
     {0xE1, {0xD0, 0x03, 0x09, 0x0A, 0x0A, 0x06, 0x2E, 0x44, 0x40, 0x3A, 0x15, 0x15, 0x26, 0x2A}, 14, 10},
 };
 
+// draw_bitmap 是异步排队的：这一块真正传完才发信号，否则复用 s_block 会把
+// 还没传出去的数据覆写掉，屏上就是错位、残影和斜纹。
+static bool IRAM_ATTR on_color_trans_done(esp_lcd_panel_io_handle_t io,
+                                          esp_lcd_panel_io_event_data_t *edata,
+                                          void *user_ctx) {
+    BaseType_t hp_woken = pdFALSE;
+    xSemaphoreGiveFromISR(s_trans_done, &hp_woken);
+    return hp_woken == pdTRUE;
+}
+
 static void backlight_init(void) {
     ledc_timer_config_t timer = {
         .speed_mode      = LEDC_LOW_SPEED_MODE,
@@ -74,6 +87,8 @@ void display_set_backlight(int pct) {
 }
 
 void display_init(void) {
+    s_trans_done = xSemaphoreCreateBinary();
+
     spi_bus_config_t bus = {
         .mosi_io_num     = DISP_PIN_MOSI,
         .miso_io_num     = -1,
@@ -85,13 +100,15 @@ void display_init(void) {
     ESP_ERROR_CHECK(spi_bus_initialize(DISP_SPI_HOST, &bus, SPI_DMA_CH_AUTO));
 
     esp_lcd_panel_io_spi_config_t io = {
-        .cs_gpio_num       = DISP_PIN_CS,
-        .dc_gpio_num       = DISP_PIN_DC,
-        .spi_mode          = 0,
-        .pclk_hz           = DISP_PCLK_HZ,
-        .trans_queue_depth = 10,
-        .lcd_cmd_bits      = 8,
-        .lcd_param_bits    = 8,
+        .cs_gpio_num         = DISP_PIN_CS,
+        .dc_gpio_num         = DISP_PIN_DC,
+        .spi_mode            = 0,
+        .pclk_hz             = DISP_PCLK_HZ,
+        .trans_queue_depth   = 10,
+        .on_color_trans_done = on_color_trans_done,
+        .user_ctx            = NULL,
+        .lcd_cmd_bits        = 8,
+        .lcd_param_bits      = 8,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(
         (esp_lcd_spi_bus_handle_t)DISP_SPI_HOST, &io, &s_io));
@@ -123,9 +140,11 @@ void display_draw_indexed(const uint8_t *idx, const uint16_t *palette) {
         const uint8_t *src = idx + (size_t)y * DISP_W;
         int n = rows * DISP_W;
         for (int i = 0; i < n; i++) {
-            // esp_lcd 已按屏字节序发送，这里直接用主机小端 RGB565，不要再 bswap
+            // 这块屏要 big-endian RGB565，逐像素高低字节互换
             s_block[i] = __builtin_bswap16(palette[src[i]]);
         }
         esp_lcd_panel_draw_bitmap(s_panel, 0, y, DISP_W, y + rows, s_block);
+        // 等这一块真的传完，再回头覆写同一个缓冲
+        xSemaphoreTake(s_trans_done, portMAX_DELAY);
     }
 }
