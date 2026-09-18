@@ -135,7 +135,7 @@ void display_init(void) {
 }
 
 void display_draw_indexed(const uint8_t *idx, const uint16_t *palette) {
-    for (int y = 0; y < DISP_H; y += BLOCK_ROWS) {
+    for (int y = DISP_TOP_MARGIN; y < DISP_H; y += BLOCK_ROWS) {
         int rows = (y + BLOCK_ROWS <= DISP_H) ? BLOCK_ROWS : (DISP_H - y);
         const uint8_t *src = idx + (size_t)y * DISP_W;
         int n = rows * DISP_W;

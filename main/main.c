@@ -82,6 +82,8 @@ void app_main(void) {
     int last_level = affinity_level();
     int bat = -1;
     int bat_tick = 0;
+    int  last_bat = -999, last_roam = -999, last_aff = -999;
+    bool last_mute = !audio_muted();   // 和当前状态相反，保证开机先画一次
 
     const int FRAME_MS      = 230;
     const int IDLE_TO_SLEEP = 40;   // 约 9 秒没人理
@@ -89,7 +91,14 @@ void app_main(void) {
 
     while (1) {
         display_draw_indexed(azhu_frame(action, frame), pal);
-        ui_draw_status(bat, roam_value(), affinity_get(), audio_muted());
+        // 状态条只在数值真变了才重画：每帧都画会被阿猪推屏擦掉再画上，肉眼就是每秒闪四次
+        int  r_now = roam_value();
+        int  a_now = affinity_get();
+        bool m_now = audio_muted();
+        if (bat != last_bat || r_now != last_roam || a_now != last_aff || m_now != last_mute) {
+            ui_draw_status(bat, r_now, a_now, m_now);
+            last_bat = bat; last_roam = r_now; last_aff = a_now; last_mute = m_now;
+        }
         frame = (frame + 1) % fpa;
 
         // 一帧时间内多采几次按键

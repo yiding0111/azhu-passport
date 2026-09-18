@@ -13,6 +13,7 @@
 #define DISP_W             240
 #define DISP_H             320
 #define DISP_INVERT_COLOR  1        // 关键：这块屏必须反相，否则满屏怪色
+#define DISP_TOP_MARGIN    28       // 顶部留给状态条，阿猪的帧不推这几行
 #define DISP_PCLK_HZ       (40 * 1000 * 1000)
 
 // ---- 三键分压：都挂 GPIO0 / ADC1 通道0 ----

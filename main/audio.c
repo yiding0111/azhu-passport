@@ -186,7 +186,7 @@ void audio_init(void) {
 
     audio_codec_i2c_cfg_t i2c_cfg = {
         .port = I2C_NUM_0,
-        .addr = ES8311_I2C_ADDR,
+        .addr = ES8311_CODEC_DEFAULT_ADDR,   // 必须是 8 位地址形式(0x18<<1)，传 0x18 会 nack
         .bus_handle = (void *)i2c_bus_get(),
     };
     const audio_codec_ctrl_if_t *ctrl_if = audio_codec_new_i2c_ctrl(&i2c_cfg);
