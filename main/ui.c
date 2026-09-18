@@ -92,7 +92,7 @@ void ui_init(void) {
     for (int i = 0; i < DISP_W * UI_STATUS_H; i++) s_bar[i] = COL_BG;
 }
 
-void ui_draw_status(int battery_pct, int roam, int affinity, bool muted) {
+void ui_draw_status(int battery_pct, int roam, int affinity, bool muted, int vol_level) {
     for (int i = 0; i < DISP_W * UI_STATUS_H; i++) s_bar[i] = COL_BG;
 
     // 电量：图标 + 百分比
@@ -111,11 +111,16 @@ void ui_draw_status(int battery_pct, int roam, int affinity, bool muted) {
     blit_bits(150, 8, ICON_HEART, 8, 7, 2, COL_HEART);
     draw_num(170, 7, affinity, 2, COL_HEART);
 
-    // 静音状态：喇叭，静音时打一条斜杠
-    blit_bits(216, 8, ICON_SPK, 8, 7, 2, COL_FG);
-    if (muted) {
-        for (int i = 0; i < 18; i++) px(214 + i, 6 + i, COL_LOW);
-        for (int i = 0; i < 18; i++) px(215 + i, 6 + i, COL_LOW);
+    // 喇叭 + 音量档位竖条；静音时打一条斜杠
+    blit_bits(206, 8, ICON_SPK, 8, 7, 2, COL_FG);
+    if (!muted) {
+        for (int b = 0; b <= vol_level && b < 3; b++) {
+            int h = 4 + b * 5;
+            fill_rect(224 + b * 5, 8 + (14 - h), 3, h, COL_FG);
+        }
+    } else {
+        for (int i = 0; i < 18; i++) px(204 + i, 6 + i, COL_LOW);
+        for (int i = 0; i < 18; i++) px(205 + i, 6 + i, COL_LOW);
     }
 
     display_blit(0, 0, DISP_W, UI_STATUS_H, s_bar);

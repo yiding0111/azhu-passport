@@ -16,15 +16,20 @@
 #define TAG          "audio"
 #define NVS_NS       "azhu"
 #define KEY_MUTE     "mute"
+#define KEY_VOL      "vol"
 
 #define SAMPLE_RATE  16000
 #define CHUNK        320                 // 20ms @16kHz
-#define AMP_BGM      5200
-#define AMP_SFX      7000
+#define AMP_BGM      3600
+#define AMP_SFX      5000
+
+// codec 输出音量三档，默认最低
+static const int VOL_TABLE[3] = {20, 45, 75};
 
 static i2s_chan_handle_t     s_tx;
 static esp_codec_dev_handle_t s_dev;
 static bool s_muted = false;
+static int  s_vol_level = 0;
 static bool s_ready = false;
 
 // ---------- 曲谱 ----------
@@ -74,6 +79,16 @@ static inline int16_t square(uint32_t *phase, uint32_t hz, int amp) {
     return (*phase & 0x80000000u) ? (int16_t)amp : (int16_t)(-amp);
 }
 
+// 三角波：谐波按 1/n^2 衰减，比方波柔和得多，仍是合成音的味道
+static inline int16_t tri(uint32_t *phase, uint32_t hz, int amp) {
+    if (hz == 0) return 0;
+    uint32_t step = (uint32_t)(((uint64_t)hz << 32) / SAMPLE_RATE);
+    *phase += step;
+    int32_t x = (int32_t)(*phase >> 16);                        // 0..65535
+    int32_t t = (x < 32768) ? (x * 2 - 32768) : (98303 - x * 2); // -32768..32767
+    return (int16_t)((t * amp) / 32768);
+}
+
 static void fill_chunk(int16_t *buf, int n) {
     for (int i = 0; i < n; i++) {
         int32_t v = 0;
@@ -84,7 +99,7 @@ static void fill_chunk(int16_t *buf, int n) {
             s_note_left = ms_to_samples(BGM[s_note_i].ms);
             s_phase_bgm = 0;
         }
-        v += square(&s_phase_bgm, BGM[s_note_i].hz, AMP_BGM);
+        v += tri(&s_phase_bgm, BGM[s_note_i].hz, AMP_BGM);
         s_note_left--;
 
         // 音效（叠加，优先级高）
@@ -128,11 +143,21 @@ static void audio_task(void *arg) {
     }
 }
 
-static void load_mute(void) {
+static void load_prefs(void) {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
         int32_t v = 0;
         if (nvs_get_i32(h, KEY_MUTE, &v) == ESP_OK) s_muted = (v != 0);
+        if (nvs_get_i32(h, KEY_VOL, &v) == ESP_OK && v >= 0 && v <= 2) s_vol_level = (int)v;
+        nvs_close(h);
+    }
+}
+
+static void save_vol(void) {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_i32(h, KEY_VOL, (int32_t)s_vol_level);
+        nvs_commit(h);
         nvs_close(h);
     }
 }
@@ -147,7 +172,7 @@ static void save_mute(void) {
 }
 
 void audio_init(void) {
-    load_mute();
+    load_prefs();
 
     // I2S TX（只输出，不要麦克风）
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
@@ -234,11 +259,12 @@ void audio_init(void) {
         .sample_rate     = SAMPLE_RATE,
     };
     esp_codec_dev_open(s_dev, &fs);
-    esp_codec_dev_set_out_vol(s_dev, 70);
+    esp_codec_dev_set_out_vol(s_dev, VOL_TABLE[s_vol_level]);
 
     s_note_left = 0;
     s_ready = true;
-    ESP_LOGI(TAG, "音频就绪（%s）", s_muted ? "静音" : "有声");
+    ESP_LOGI(TAG, "音频就绪（%s，音量档 %d = %d%%）",
+             s_muted ? "静音" : "有声", s_vol_level, VOL_TABLE[s_vol_level]);
     xTaskCreate(audio_task, "audio", 4096, NULL, 4, NULL);
 }
 
@@ -251,6 +277,15 @@ void audio_set_muted(bool m) {
 bool audio_muted(void) { return s_muted; }
 
 void audio_toggle_mute(void) { audio_set_muted(!s_muted); }
+
+void audio_cycle_volume(void) {
+    s_vol_level = (s_vol_level + 1) % 3;
+    save_vol();
+    if (s_dev) esp_codec_dev_set_out_vol(s_dev, VOL_TABLE[s_vol_level]);
+    ESP_LOGI(TAG, "音量档 %d = %d%%", s_vol_level, VOL_TABLE[s_vol_level]);
+}
+
+int audio_volume_level(void) { return s_vol_level; }
 
 void audio_sfx(int which) {
     if (!s_ready || s_muted) return;

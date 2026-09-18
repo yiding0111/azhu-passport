@@ -6,4 +6,4 @@
 
 void ui_init(void);
 // 画顶部状态条：电量% / 溜达值 / 好感度 / 静音图标
-void ui_draw_status(int battery_pct, int roam, int affinity, bool muted);
+void ui_draw_status(int battery_pct, int roam, int affinity, bool muted, int vol_level);

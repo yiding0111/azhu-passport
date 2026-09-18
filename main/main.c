@@ -84,6 +84,7 @@ void app_main(void) {
     int bat_tick = 0;
     int  last_bat = -999, last_roam = -999, last_aff = -999;
     bool last_mute = !audio_muted();   // 和当前状态相反，保证开机先画一次
+    int  last_vol = -1;
 
     const int FRAME_MS      = 230;
     const int IDLE_TO_SLEEP = 40;   // 约 9 秒没人理
@@ -95,9 +96,12 @@ void app_main(void) {
         int  r_now = roam_value();
         int  a_now = affinity_get();
         bool m_now = audio_muted();
-        if (bat != last_bat || r_now != last_roam || a_now != last_aff || m_now != last_mute) {
-            ui_draw_status(bat, r_now, a_now, m_now);
-            last_bat = bat; last_roam = r_now; last_aff = a_now; last_mute = m_now;
+        int  v_now = audio_volume_level();
+        if (bat != last_bat || r_now != last_roam || a_now != last_aff
+            || m_now != last_mute || v_now != last_vol) {
+            ui_draw_status(bat, r_now, a_now, m_now, v_now);
+            last_bat = bat; last_roam = r_now; last_aff = a_now;
+            last_mute = m_now; last_vol = v_now;
         }
         frame = (frame + 1) % fpa;
 
@@ -112,6 +116,10 @@ void app_main(void) {
 
         if (ev.longpress == BTN_UP) {
             audio_toggle_mute();
+            idle_ticks = 0;
+        } else if (ev.longpress == BTN_DOWN) {
+            audio_cycle_volume();
+            audio_sfx(SFX_OK);          // 出个声好让你听见现在多大
             idle_ticks = 0;
         } else if (ev.click == BTN_UP) {
             action = (action - 1 + na) % na; frame = 0; idle_ticks = 0;
